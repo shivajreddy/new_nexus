@@ -1,7 +1,8 @@
 ## STACK
-go
-angular
-psql
+go  
+angular  
+psql  
 
-docker
-gcp
+docker  
+gcp  
+
