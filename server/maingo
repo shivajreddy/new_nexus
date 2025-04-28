@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,11 +9,15 @@ import (
 	"os"
 	"time"
 
+	// gorm
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	// postgres
+	_ "github.com/lib/pq"
 )
 
-var db *gorm.DB
+var db *sql.DB
 
 type Employee struct {
 	ID       int    `json:"id"`
@@ -29,24 +34,23 @@ func main() {
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 
-	// Build DSN (Data Source Name) for PostgreSQL
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName)
+	psqlInfo := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPassword, dbName,
+	)
 
-	// Initialize GORM DB connection
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal("Error connecting to database: ", err)
 	}
 
-	// Auto migrate the Employee struct
-	err = db.AutoMigrate(&Employee{})
+	err = db.Ping()
 	if err != nil {
-		log.Fatal("Error migrating database: ", err)
+		log.Fatal("Error pinging database: ", err)
 	}
 
 	fmt.Println("Connected to the database!")
 
-	// Set up HTTP routes
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/employees", employeesHandler)
 	http.HandleFunc("/new", newEmployeeHandler)
@@ -63,28 +67,38 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func employeesHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(":::: @ /employees route ::::")
-	var employees []Employee
-	// Retrieve all employees from the database using GORM
-	result := db.Find(&employees)
-	if result.Error != nil {
+	rows, err := db.Query("SELECT id, name, position, salary FROM employees")
+	if err != nil {
 		http.Error(w, "Error querying employees", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
-	// Return employees as a JSON response
+	var employees []Employee
+
+	for rows.Next() {
+		var emp Employee
+		err := rows.Scan(&emp.ID, &emp.Name, &emp.Position, &emp.Salary)
+		if err != nil {
+			http.Error(w, "Error scanning employee", http.StatusInternalServerError)
+			return
+		}
+		employees = append(employees, emp)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(employees)
 }
 
 func newEmployeeHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the last employee from the database using GORM
+	// Get the last employee from the database
 	var lastEmp Employee
-	result := db.Order("id desc").First(&lastEmp)
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+	err := db.QueryRow("SELECT id, name, position FROM employees ORDER BY id DESC LIMIT 1").Scan(&lastEmp.ID, &lastEmp.Name, &lastEmp.Position)
+	if err != nil {
+		if err == sql.ErrNoRows {
 			http.Error(w, "No employees found", http.StatusNotFound)
 		} else {
-			http.Error(w, "Error fetching last employee", http.StatusInternalServerError)
+			http.Error(w, "Error fetching last Employee", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -95,21 +109,21 @@ func newEmployeeHandler(w http.ResponseWriter, r *http.Request) {
 	newPosition := lastEmp.Position
 	newSalary := int(time.Now().Local().Unix()) // Current time in seconds
 
-	// Create the new employee in the database using GORM
+	// Insert the new employee in to the database
+	_, err = db.Exec("INSERT INTO employees (name, position, salary) VALUES ($1, $2, $3)", newName, newPosition, newSalary)
+	if err != nil {
+
+		http.Error(w, "Error inserting new employee", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the newly employee as a JSON response
 	newEmployee := Employee{
 		ID:       newId,
 		Name:     newName,
 		Position: newPosition,
 		Salary:   newSalary,
 	}
-
-	result = db.Create(&newEmployee)
-	if result.Error != nil {
-		http.Error(w, "Error inserting new employee", http.StatusInternalServerError)
-		return
-	}
-
-	// Return the newly created employee as a JSON response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(newEmployee)
 }
