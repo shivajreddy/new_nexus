@@ -89,18 +89,12 @@ func newEmployeeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate the new employee details
-	newId := lastEmp.ID + 1
-	newName := lastEmp.Name
-	newPosition := lastEmp.Position
-	newSalary := int(time.Now().Local().Unix()) // Current time in seconds
-
 	// Create the new employee in the database using GORM
 	newEmployee := Employee{
-		ID:       newId,
-		Name:     newName,
-		Position: newPosition,
-		Salary:   newSalary,
+		ID:       lastEmp.ID + 1,
+		Name:     lastEmp.Name,
+		Position: lastEmp.Position,
+		Salary:   int(time.Now().Local().Unix()), // Current time in seconds
 	}
 
 	result = db.Create(&newEmployee)
