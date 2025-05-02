@@ -9,6 +9,12 @@ const (
 	TaskDisabled
 )
 
+type ProjectStage int
+
+const (
+	PreCon
+)
+
 type Task struct {
 	status          TaskStatus
 	subTasks        []Task
@@ -17,7 +23,7 @@ type Task struct {
 	personOfContact Contact
 }
 
-// TODO
+// TODO: Placeholder types
 type Message int
 type Chat int
 
