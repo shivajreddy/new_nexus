@@ -22,6 +22,9 @@ type Employee struct {
 }
 
 func main() {
+	t := Task{}
+	fmt.Println("t", t)
+
 	var err error
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
